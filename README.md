@@ -21,4 +21,10 @@
 **d)** A base possui valores na coluna 'Product Name' que possuem vírgula como em `"Stur-D-Stor Shelving, Vertical 5-Shelf: 72""H x 36""W x 18 1/2""D"`. Como o valor está entre aspas duplas, a vírgula presente no nome do produto não é entendida como um caractere separador de colunas da extensão de arquivo CSV.
 
 ## Respostas
-(Enunciados 4, 6 e 7)
+### Enunciado 4
+A **regra 1** permite o acesso ao PostgreSQL usando psql no terminal CloudShell, pela porta TCP 5432. Sem essa regra, a tentativa de conexão pode falhar alegando tempo esgotado (Connection timed out).
+
+A **regra 2** é autorreferenciada e permite a comunicação entre os recursos do mesmo security group, incluindo os componentes do Glue e o banco. Sem essa regra, o teste de conexão ou a execução do job pode falhar por tempo esgotado.
+
+
+(Enunciados 6 e 7)
