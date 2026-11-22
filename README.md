@@ -26,5 +26,11 @@ A **regra 1** permite o acesso ao PostgreSQL usando psql no terminal CloudShell,
 
 A **regra 2** é autorreferenciada e permite a comunicação entre os recursos do mesmo security group, incluindo os componentes do Glue e o banco. Sem essa regra, o teste de conexão ou a execução do job pode falhar por tempo esgotado.
 
+### Enunciado 6
+Tanto os serviços **AWS STS** e **AWS Secrets Manager** quanto o serviço **Amazon S3** são *externos* à VPC da AWS, enquanto o **AWS Glue** opera *dentro* da VPC. Por isso é necessário criar os *endpoints* para realizar a conexão da base de dados bruta em CSV armazenada dentro do bucket do S3 ao banco de dados criado e gerido dentro do **Amazon RDS** através do Glue, o serviço que opera o ETL.
 
-(Enunciados 6 e 7)
+Usamos um **endpoint de gateway** para conectar o job do Glue ao S3 porque ele permite o acesso pela rede da AWS, por meio de uma rota em uma das **route tables da VPC**, sem precisar de NAT Gateway e sem custo adicional pelo endpoint. E usamos **endpoints de interface** para os serviços STS e Secrets Manager pois esses não suportam os endpoints de gateway e funcionam por meio de *interfaces de rede* com **IP privado**.
+
+A opção **Private DNS** utiliza o protocolo de rede DNS para que os nomes padrão desses serviços apontem para os IPs privados dos endpoints. Se essa opção estiver *desabilitada*, esses nomes continuam apontando para IPs públicos. Como o job não tem um caminho de rede para alcançar esses endereços nessa configuração, as chamadas ao STS ou ao Secrets Manager falham por **tempo esgotado**, impedindo a conclusão do ETL.
+
+(Enunciados 7)

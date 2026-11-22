@@ -1,0 +1,138 @@
+{
+    "VpcEndpoints": [
+        {
+            "VpcEndpointId": "vpce-0966efe56d4ed2b42",
+            "VpcEndpointType": "Gateway",
+            "VpcId": "vpc-0594093de28890ac7",
+            "ServiceName": "com.amazonaws.us-east-1.s3",
+            "State": "available",
+            "PolicyDocument": "{\"Version\":\"2008-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"*\",\"Resource\":\"*\"}]}",
+            "RouteTableIds": [
+                "rtb-018e1cc526da5bef6"
+            ],
+            "SubnetIds": [],
+            "Groups": [],
+            "IpAddressType": "ipv4",
+            "DnsOptions": {
+                "DnsRecordIpType": "service-defined"
+            },
+            "PrivateDnsEnabled": false,
+            "RequesterManaged": false,
+            "NetworkInterfaceIds": [],
+            "DnsEntries": [],
+            "CreationTimestamp": "2026-11-22T17:25:47+00:00",
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "endpoint-s3-2041382521025"
+                }
+            ],
+            "OwnerId": "296444421404",
+            "ServiceRegion": "us-east-1"
+        },
+        {
+            "VpcEndpointId": "vpce-083280955863bf74d",
+            "VpcEndpointType": "Interface",
+            "VpcId": "vpc-0594093de28890ac7",
+            "ServiceName": "com.amazonaws.us-east-1.sts",
+            "State": "available",
+            "PolicyDocument": "{\n  \"Statement\": [\n    {\n      \"Action\": \"*\",\n      \"Effect\": \"Allow\",\n      \"Principal\": \"*\",\n      \"Resource\": \"*\"\n    }\n  ]\n}",
+            "RouteTableIds": [],
+            "SubnetIds": [
+                "subnet-015266fa24edd14ca"
+            ],
+            "Groups": [
+                {
+                    "GroupId": "sg-085db8d71edf705fb",
+                    "GroupName": "default"
+                }
+            ],
+            "IpAddressType": "ipv4",
+            "DnsOptions": {
+                "DnsRecordIpType": "ipv4"
+            },
+            "PrivateDnsEnabled": true,
+            "RequesterManaged": false,
+            "NetworkInterfaceIds": [
+                "eni-0953c46c0306c683f"
+            ],
+            "DnsEntries": [
+                {
+                    "DnsName": "vpce-083280955863bf74d-hhdzhdoy.sts.us-east-1.vpce.amazonaws.com",
+                    "HostedZoneId": "Z7HUB22UULQXV"
+                },
+                {
+                    "DnsName": "vpce-083280955863bf74d-hhdzhdoy-us-east-1a.sts.us-east-1.vpce.amazonaws.com",
+                    "HostedZoneId": "Z7HUB22UULQXV"
+                },
+                {
+                    "DnsName": "sts.us-east-1.amazonaws.com",
+                    "HostedZoneId": "Z054910416F6Y5RXFGHFC"
+                },
+                {
+                    "DnsName": "sts.us-east-1.api.aws",
+                    "HostedZoneId": "Z02434142JC8MVWVHUKFD"
+                }
+            ],
+            "CreationTimestamp": "2026-11-22T17:42:00.289000+00:00",
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "endpoint-sts-2041382521025"
+                }
+            ],
+            "OwnerId": "296444421404",
+            "ServiceRegion": "us-east-1"
+        },
+        {
+            "VpcEndpointId": "vpce-031e91301d44b22cb",
+            "VpcEndpointType": "Interface",
+            "VpcId": "vpc-0594093de28890ac7",
+            "ServiceName": "com.amazonaws.us-east-1.secretsmanager",
+            "State": "available",
+            "PolicyDocument": "{\n  \"Statement\": [\n    {\n      \"Action\": \"*\",\n      \"Effect\": \"Allow\",\n      \"Principal\": \"*\",\n      \"Resource\": \"*\"\n    }\n  ]\n}",
+            "RouteTableIds": [],
+            "SubnetIds": [
+                "subnet-015266fa24edd14ca"
+            ],
+            "Groups": [
+                {
+                    "GroupId": "sg-085db8d71edf705fb",
+                    "GroupName": "default"
+                }
+            ],
+            "IpAddressType": "ipv4",
+            "DnsOptions": {
+                "DnsRecordIpType": "ipv4"
+            },
+            "PrivateDnsEnabled": true,
+            "RequesterManaged": false,
+            "NetworkInterfaceIds": [
+                "eni-03751d3c12a136d61"
+            ],
+            "DnsEntries": [
+                {
+                    "DnsName": "vpce-031e91301d44b22cb-3y96awne.secretsmanager.us-east-1.vpce.amazonaws.com",
+                    "HostedZoneId": "Z7HUB22UULQXV"
+                },
+                {
+                    "DnsName": "vpce-031e91301d44b22cb-3y96awne-us-east-1a.secretsmanager.us-east-1.vpce.amazonaws.com",
+                    "HostedZoneId": "Z7HUB22UULQXV"
+                },
+                {
+                    "DnsName": "secretsmanager.us-east-1.amazonaws.com",
+                    "HostedZoneId": "Z08301832NXN5PQMD8JZG"
+                }
+            ],
+            "CreationTimestamp": "2026-11-22T17:47:23.474000+00:00",
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "endpoint-secrets-2041382521025"
+                }
+            ],
+            "OwnerId": "296444421404",
+            "ServiceRegion": "us-east-1"
+        }
+    ]
+}
