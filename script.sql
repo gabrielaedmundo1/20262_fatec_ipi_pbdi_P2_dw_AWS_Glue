@@ -236,14 +236,14 @@ DECLARE
     v_total_fato INTEGER;
     v_total_staging INTEGER;
 BEGIN
-    -- a) Esvazia a fato e as quatro dimensões, reiniciando as sequências.
+    -- a) Esvazia a fato e as quatro dimensões, reiniciando as sequências
     TRUNCATE TABLE dw.fact_sales, dw.dim_customer,
                    dw.dim_product, dw.dim_location,
                    dw.dim_ship_mode
              RESTART IDENTITY CASCADE;
     RAISE NOTICE 'Modelo dimensional limpo';
 
-    -- b) Agrupa pela chave natural para manter uma linha por chave.
+    -- b) Agrupa pela chave natural para manter uma linha por chave
     -- Quando há atributos diferentes, MIN escolhe o menor valor
     -- em ordem alfabética, mantendo o mesmo critério em cada carga.
     -- No Enunciado 12, foram encontrados 32 product_id com nomes diferentes.
@@ -276,9 +276,9 @@ BEGIN
 
     RAISE NOTICE 'Dimensoes carregadas';
 
-    -- c) Obtém as surrogate keys das dimensões por JOIN.
-    -- As chaves de data são calculadas por formatação.
-    -- ship_days é calculado pela subtração das datas.
+    -- c) Obtém as surrogate keys das dimensões por JOIN
+    -- As chaves de data são calculadas por formatação
+    -- ship_days é calculado pela subtração das datas
     INSERT INTO dw.fact_sales (row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
 							 product_sk, location_sk, ship_mode_sk, sales, ship_days)
     SELECT
@@ -294,7 +294,7 @@ BEGIN
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
     RAISE NOTICE 'Linhas inseridas na fato: %', v_linhas;
 
-    -- e) Compara as quantidades da fato e da staging.
+    -- e) Compara as quantidades da fato e da staging
     SELECT COUNT(*) INTO v_total_fato
     FROM dw.fact_sales;
     SELECT COUNT(*) INTO v_total_staging
@@ -329,3 +329,107 @@ SELECT 'FATO', COUNT(*) FROM dw.fact_sales;
 --  location  |    628
 --  ship_mode |      4
 --  FATO      |   9800
+
+-- Enunciado 15 
+/* Crie a tabela dw.carga_log (identificador SERIAL, sale_sk, row_nk, operação, usuário e
+momento), a função dw.audita_fact_sales() e o trigger trg_audita_fact_sales, BEFORE
+INSERT e FOR EACH ROW sobre dw.fact_sales, como na Seção 14 da apostila. A função
+rejeita, com RAISE EXCEPTION e mensagem que identifique a linha, vendas com valor menor
+ou igual a zero e vendas com ship_days negativo, e registra no log toda linha aceita. Teste
+com uma inserção válida e deixe comentada uma inválida, acompanhada do erro esperado.
+Por fim, esvazie o log reiniciando a sequência, chame novamente a procedure e confira que o
+log tem exatamente uma linha por linha da fato. */
+
+-- Cria a tabela de log
+DROP TABLE IF EXISTS dw.carga_log;
+CREATE TABLE dw.carga_log (
+    log_id SERIAL PRIMARY KEY,
+    sale_sk INTEGER,
+    row_nk INTEGER,
+    operacao VARCHAR(10),
+    usuario VARCHAR(60),
+    momento TIMESTAMP
+);
+
+-- Cria a função de auditoria da fato sales
+CREATE OR REPLACE FUNCTION dw.audita_fact_sales()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Validação 1: o valor da venda deve ser maior que zero
+    IF NEW.sales <= 0 THEN
+        RAISE EXCEPTION 'Linha % rejeitada: valor invalido (%)',
+                        NEW.row_nk, NEW.sales;
+    END IF;
+
+    -- Validação 2: os dias de envio não podem ser negativos
+    IF NEW.ship_days < 0 THEN
+        RAISE EXCEPTION 'Linha % rejeitada: dias de envio negativos (%)',
+                        NEW.row_nk, NEW.ship_days;
+    END IF;
+
+    -- Registra no log a linha aceita
+    INSERT INTO dw.carga_log (sale_sk, row_nk, operacao, usuario, momento)
+    VALUES ( NEW.sale_sk, NEW.row_nk, TG_OP, CURRENT_USER, NOW());
+    RETURN NEW;
+END;
+$$;
+
+-- Cria o trigger para auditar a fato sales
+DROP TRIGGER IF EXISTS trg_audita_fact_sales ON dw.fact_sales;
+
+CREATE TRIGGER trg_audita_fact_sales
+    BEFORE INSERT ON dw.fact_sales
+    FOR EACH ROW
+    EXECUTE FUNCTION dw.audita_fact_sales();
+
+-- Inserção válida: venda positiva e envio quatro dias após o pedido
+INSERT INTO dw.fact_sales (
+    row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
+    product_sk, location_sk, ship_mode_sk, sales, ship_days)
+VALUES (9801, 'TESTE-VALIDO-01', 20171222, 20171226, 1, 1, 1, 1, 
+	147.00, 4);
+
+-- Confere o registro da inserção válida
+SELECT * FROM dw.carga_log;
+-- Resultado da consulta acima:
+--  log_id | sale_sk | row_nk | operacao | usuario  |          momento           
+-- --------+---------+--------+----------+----------+----------------------------
+--       1 |    9801 |   9801 | INSERT   | postgres | 2026-11-23 23:10:15.587275
+
+-- Inserção inválida: o valor da venda é zero
+-- INSERT INTO dw.fact_sales (
+--     row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
+--     product_sk, location_sk, ship_mode_sk, sales, ship_days)
+-- VALUES (9802, 'TESTE-INVALIDO-01', 20171222, 20171226, 1, 1, 1,
+-- 	1, 0.00, 4);
+-- Resultado esperado da inserção inválida:
+-- ERROR:  Linha 9802 rejeitada: valor invalido (0.00)
+-- CONTEXT:  PL/pgSQL function dw.audita_fact_sales() line 5 at RAISE
+
+-- Esvazia o log e reinicia sua sequência
+TRUNCATE TABLE dw.carga_log RESTART IDENTITY;
+
+-- Recarrega o modelo dimensional, agora com a auditoria ativa
+CALL dw.carrega_dw();
+
+-- Compara as quantidades da fato e do log
+SELECT
+    (SELECT COUNT(*) FROM dw.fact_sales) AS linhas_fato,
+    (SELECT COUNT(*) FROM dw.carga_log) AS linhas_log;
+-- Resultado da consulta acima:
+--  linhas_fato | linhas_log 
+-- -------------+------------
+--         9800 |       9800
+
+-- Verifica se alguma venda não possui exatamente um registro no log
+SELECT f.sale_sk, f.row_nk, COUNT(l.log_id) AS qtd_logs
+FROM dw.fact_sales f LEFT JOIN dw.carga_log l
+	ON f.sale_sk = l.sale_sk AND f.row_nk = l.row_nk
+GROUP BY f.sale_sk, f.row_nk
+HAVING COUNT(l.log_id) <> 1;
+-- Resultado da consulta acima:
+--  sale_sk | row_nk | qtd_logs 
+-- ---------+--------+----------
+-- (0 rows)
