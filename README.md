@@ -33,4 +33,7 @@ Usamos um **endpoint de gateway** para conectar o job do Glue ao S3 porque ele p
 
 A opção **Private DNS** utiliza o protocolo de rede DNS para que os nomes padrão desses serviços apontem para os IPs privados dos endpoints. Se essa opção estiver *desabilitada*, esses nomes continuam apontando para IPs públicos. Como o job não tem um caminho de rede para alcançar esses endereços nessa configuração, as chamadas ao STS ou ao Secrets Manager falham por **tempo esgotado**, impedindo a conclusão do ETL.
 
-(Enunciados 7)
+### Enunciado 7
+O crawler atribuiu o tipo `BIGINT` para as colunas *row id* e *postal code*. Já a coluna *sales* recebeu o tipo `DOUBLE`.
+
+A coluna *row id* guarda o número da linha de cada registro da base de dados, enquanto *postal code* guarda os códigos postais. Como o crawler só atribui um tipo numérico quando os valores preenchidos da amostra se parecem com números, essas duas colunas receberam `BIGINT` por apresentarem números inteiros. Já a coluna *sales* aparentemente representa um preço de venda e apresenta números com casas decimais, por isso recebeu o tipo `DOUBLE`.
