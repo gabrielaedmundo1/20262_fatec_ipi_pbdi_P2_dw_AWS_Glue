@@ -207,3 +207,125 @@ CREATE INDEX ix_fs_customer ON dw.fact_sales (customer_sk);
 CREATE INDEX ix_fs_product ON dw.fact_sales (product_sk);
 CREATE INDEX ix_fs_location ON dw.fact_sales (location_sk);
 CREATE INDEX ix_fs_ship_mode ON dw.fact_sales (ship_mode_sk);
+
+-- Enunciado 14
+/* Crie a procedure dw.carrega_dw(), nos moldes da Seção 13 da apostila. Requisitos
+obrigatórios:
+	a) esvazia a fato e as quatro dimensões da Fase 6, reiniciando as sequências; 
+	a dw.dim_date não é esvaziada;
+	b) carrega cada dimensão com exatamente uma linha por chave natural; quando o 
+	Enunciado 12 mostrar mais de um valor de atributo para a mesma chave, usa o menor 
+	valor, em ordem alfabética, e explica essa escolha em comentário;
+	c) carrega a fato trocando os atributos naturais pelas surrogate keys por JOIN; as 
+	duas chaves de data são obtidas por formatação das datas, sem JOIN com a dw.dim_date; 
+	ship_days é a diferença, em dias, entre a data de envio e a do pedido, obtida por 
+	subtração de datas;
+	d) após cada carga, obtém a quantidade de linhas inseridas com GET DIAGNOSTICS e a
+	informa com RAISE NOTICE;
+	e) ao final, compara a quantidade de linhas da fato com a da staging e, se forem 
+	diferentes, interrompe a carga com RAISE EXCEPTION, informando as duas quantidades.
+Em seguida, chame a procedure e confira, em uma única consulta com UNION ALL, a
+quantidade de linhas das quatro dimensões e da fato. Registre os números em comentário. */
+
+-- Cria a procedure de carga do DW
+CREATE OR REPLACE PROCEDURE dw.carrega_dw()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_linhas INTEGER;
+    v_total_fato INTEGER;
+    v_total_staging INTEGER;
+BEGIN
+    -- a) Esvazia a fato e as quatro dimensões, reiniciando as sequências.
+    TRUNCATE TABLE dw.fact_sales, dw.dim_customer,
+                   dw.dim_product, dw.dim_location,
+                   dw.dim_ship_mode
+             RESTART IDENTITY CASCADE;
+    RAISE NOTICE 'Modelo dimensional limpo';
+
+    -- b) Agrupa pela chave natural para manter uma linha por chave.
+    -- Quando há atributos diferentes, MIN escolhe o menor valor
+    -- em ordem alfabética, mantendo o mesmo critério em cada carga.
+    -- No Enunciado 12, foram encontrados 32 product_id com nomes diferentes.
+    INSERT INTO dw.dim_customer (customer_id, customer_name, segment)
+    SELECT customer_id, MIN(customer_name), MIN(segment)
+    FROM staging.sales
+    GROUP BY customer_id;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_customer: %', v_linhas;
+
+    INSERT INTO dw.dim_product (product_id, product_name, category, sub_category)
+    SELECT product_id, MIN(product_name), MIN(category), MIN(sub_category)
+    FROM staging.sales
+    GROUP BY product_id;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_product: %', v_linhas;
+
+    INSERT INTO dw.dim_location (country, state, city, postal_code, region)
+    SELECT country, state, city, postal_code, MIN(region)
+    FROM staging.sales
+    GROUP BY country, state, city, postal_code;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_location: %', v_linhas;
+
+    INSERT INTO dw.dim_ship_mode (ship_mode)
+    SELECT DISTINCT ship_mode
+    FROM staging.sales;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_ship_mode: %', v_linhas;
+
+    RAISE NOTICE 'Dimensoes carregadas';
+
+    -- c) Obtém as surrogate keys das dimensões por JOIN.
+    -- As chaves de data são calculadas por formatação.
+    -- ship_days é calculado pela subtração das datas.
+    INSERT INTO dw.fact_sales (row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
+							 product_sk, location_sk, ship_mode_sk, sales, ship_days)
+    SELECT
+        st.row_id, st.order_id, CAST(TO_CHAR(st.order_date, 'YYYYMMDD') AS INTEGER),
+        CAST(TO_CHAR(st.ship_date, 'YYYYMMDD') AS INTEGER), c.customer_sk,
+        p.product_sk, l.location_sk, s.ship_mode_sk, st.sales, st.ship_date - st.order_date
+    FROM staging.sales st
+    JOIN dw.dim_customer c ON st.customer_id = c.customer_id
+    JOIN dw.dim_product p ON st.product_id = p.product_id
+    JOIN dw.dim_location l ON st.country = l.country AND st.state = l.state
+        AND st.city = l.city AND st.postal_code = l.postal_code
+    JOIN dw.dim_ship_mode s ON st.ship_mode = s.ship_mode;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na fato: %', v_linhas;
+
+    -- e) Compara as quantidades da fato e da staging.
+    SELECT COUNT(*) INTO v_total_fato
+    FROM dw.fact_sales;
+    SELECT COUNT(*) INTO v_total_staging
+    FROM staging.sales;
+    IF v_total_fato <> v_total_staging THEN
+        RAISE EXCEPTION
+            'Quantidade de linhas na fato (%), diferente da staging (%)',
+            v_total_fato, v_total_staging;
+    END IF;
+	RAISE NOTICE 'Carga concluida com sucesso';
+END;
+$$;
+
+-- Executa a carga
+CALL dw.carrega_dw();
+
+-- Confere as quantidades em uma única consulta
+SELECT 'customer' AS dimensao, COUNT(*) AS linhas FROM dw.dim_customer
+UNION ALL
+SELECT 'product', COUNT(*) FROM dw.dim_product
+UNION ALL
+SELECT 'location', COUNT(*) FROM dw.dim_location
+UNION ALL
+SELECT 'ship_mode', COUNT(*) FROM dw.dim_ship_mode
+UNION ALL
+SELECT 'FATO', COUNT(*) FROM dw.fact_sales;
+-- Resultado da consulta acima:
+-- dimensao  | linhas 
+-- -----------+--------
+--  customer  |    793
+--  product   |   1861
+--  location  |    628
+--  ship_mode |      4
+--  FATO      |   9800
