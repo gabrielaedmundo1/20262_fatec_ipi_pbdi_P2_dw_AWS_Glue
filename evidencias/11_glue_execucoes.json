@@ -1,0 +1,48 @@
+{
+    "JobRuns": [
+        {
+            "Id": "jr_8d2421ec4383c01e6f99f18d1df850a8234554e8647950a154b80751c37ec07e",
+            "Attempt": 0,
+            "JobName": "job-superstore-etl-2041382521025",
+            "JobMode": "VISUAL",
+            "JobRunQueuingEnabled": false,
+            "StartedOn": "2026-11-23T02:52:38.467000+00:00",
+            "LastModifiedOn": "2026-11-23T02:55:17.728000+00:00",
+            "CompletedOn": "2026-11-23T02:55:17.728000+00:00",
+            "JobRunState": "SUCCEEDED",
+            "PredecessorRuns": [],
+            "AllocatedCapacity": 2,
+            "ExecutionTime": 133,
+            "Timeout": 10,
+            "MaxCapacity": 2.0,
+            "WorkerType": "G.1X",
+            "NumberOfWorkers": 2,
+            "LogGroupName": "/aws-glue/jobs",
+            "GlueVersion": "6.0",
+            "DPUSeconds": 267.0,
+            "ExecutionClass": "STANDARD"
+        },
+        {
+            "Id": "jr_1f0503a06f7fe12302f3d3e81838e402317f21ee75d81c3df45b81dec5907644",
+            "Attempt": 0,
+            "JobName": "job-superstore-etl-2041382521025",
+            "JobMode": "VISUAL",
+            "JobRunQueuingEnabled": false,
+            "StartedOn": "2026-11-23T00:39:32.252000+00:00",
+            "LastModifiedOn": "2026-11-23T00:43:02.320000+00:00",
+            "CompletedOn": "2026-11-23T00:43:02.320000+00:00",
+            "JobRunState": "SUCCEEDED",
+            "PredecessorRuns": [],
+            "AllocatedCapacity": 10,
+            "ExecutionTime": 196,
+            "Timeout": 480,
+            "MaxCapacity": 10.0,
+            "WorkerType": "G.1X",
+            "NumberOfWorkers": 10,
+            "LogGroupName": "/aws-glue/jobs",
+            "GlueVersion": "6.0",
+            "DPUSeconds": 1967.0,
+            "ExecutionClass": "STANDARD"
+        }
+    ]
+}

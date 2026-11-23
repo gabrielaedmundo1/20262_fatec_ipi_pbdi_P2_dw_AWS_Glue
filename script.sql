@@ -39,3 +39,19 @@ CREATE TABLE staging.sales (
 -- Verifica a criação dos schemas e da tabela
 \dn
 \d staging.sales
+
+-- Enunciado 10
+/* Escreva uma única consulta sobre staging.sales que devolva, em uma linha: a quantidade
+de linhas, a soma de sales, a menor data de pedido, a maior data de envio, a quantidade de
+códigos postais 'N/D' e a quantidade de linhas com data de envio anterior à data do pedido.
+Registre os valores em comentário. A quantidade de linhas e a de códigos postais 'N/D'
+devem coincidir com as respostas (a) e (c) do Enunciado 2. */
+
+SELECT
+    COUNT(*) AS qtd_linhas, -- 9800
+    SUM(sales) AS total_vendas, -- 2261536.97
+    MIN(order_date) AS primeira_data_pedido, -- 2015-01-03
+    MAX(ship_date) AS ultima_data_envio, -- 2019-01-05
+    COUNT(*) FILTER (WHERE postal_code = 'N/D') AS qtd_nd, -- 11
+    COUNT(*) FILTER (WHERE ship_date < order_date) AS qtd_envio_antes_pedido -- 0
+FROM staging.sales;
