@@ -14,7 +14,7 @@ CREATE SCHEMA IF NOT EXISTS staging;
 CREATE SCHEMA IF NOT EXISTS dw;
 
 -- Cria a tabela de destino
-DROP TABLE IF EXISTS staging.sales CASCADE;
+-- DROP TABLE IF EXISTS staging.sales CASCADE;
 CREATE TABLE staging.sales (
 	row_id INTEGER PRIMARY KEY,
 	order_id VARCHAR(20) NOT NULL,
@@ -433,3 +433,112 @@ HAVING COUNT(l.log_id) <> 1;
 --  sale_sk | row_nk | qtd_logs 
 -- ---------+--------+----------
 -- (0 rows)
+
+-- Enunciado 16
+/* Mostre, para cada região e categoria, a quantidade de pedidos distintos, a quantidade 
+de itens vendidos e a receita, da maior para a menor receita. */
+
+SELECT
+	l.region AS regiao, p.category AS categoria,
+	COUNT(DISTINCT f.order_nk) AS qtd_pedidos,
+	COUNT(*) AS qtd_itens_vendidos,
+	SUM(f.sales) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_location l ON f.location_sk = l.location_sk
+JOIN dw.dim_product p ON f.product_sk = p.product_sk
+GROUP BY l.region, p.category
+ORDER BY receita DESC;
+-- Resultado da consulta acima:
+--  regiao  |    categoria    | qtd_pedidos | qtd_itens_vendidos |  receita  
+-- ---------+-----------------+-------------+--------------------+-----------
+--  East    | Technology      |         436 |                527 | 263116.59
+--  West    | Technology      |         483 |                589 | 247404.95
+--  West    | Furniture       |         582 |                691 | 245348.36
+--  West    | Office Supplies |        1150 |               1860 | 217466.46
+--  East    | Furniture       |         480 |                591 | 206461.36
+--  East    | Office Supplies |        1048 |               1667 | 199940.90
+--  Central | Technology      |         348 |                408 | 168739.19
+--  Central | Office Supplies |         865 |               1399 | 163590.15
+--  Central | Furniture       |         393 |                470 | 160317.56
+--  South   | Technology      |         252 |                289 | 148195.21
+--  South   | Office Supplies |         613 |                983 | 124424.77
+--  South   | Furniture       |         272 |                326 | 116531.47
+-- (12 rows)
+
+-- Enunciado 17
+/* Mostre, para cada modalidade de envio, a quantidade de itens, a média de ship_days
+arredondada para uma casa decimal e o menor e o maior valor de ship_days, da menor
+para a maior média. */
+
+SELECT
+	sh.ship_mode AS modalidade_envio,
+	COUNT(*) AS qtd_itens,
+	ROUND(AVG(f.ship_days)::NUMERIC, 1) AS media_ship_days,
+	MIN(f.ship_days) AS menor_ship_days,
+	MAX(f.ship_days) AS maior_ship_days
+FROM dw.fact_sales f
+JOIN dw.dim_ship_mode sh ON f.ship_mode_sk = sh.ship_mode_sk
+GROUP BY sh.ship_mode
+ORDER BY media_ship_days ASC;
+-- Resultado da consulta acima:
+-- modalidade_envio | qtd_itens | media_ship_days | menor_ship_days | maior_ship_days 
+-- ------------------+-----------+-----------------+-----------------+-----------------
+--  Same Day         |       538 |             0.0 |               0 |               1
+--  First Class      |      1501 |             2.2 |               1 |               4
+--  Second Class     |      1902 |             3.2 |               1 |               5
+--  Standard Class   |      5859 |             5.0 |               3 |               7
+-- (4 rows)
+
+-- Enunciado 18
+/* Mostre os dez clientes de maior receita, com nome, segmento, receita e participação percentual
+na receita total de todos os clientes, arredondada para duas casas, usando uma função de
+janela como na Seção 15.3 da apostila. */
+SELECT
+    c.customer_name AS top10_clientes,
+	c.segment AS segmento,
+    SUM(f.sales)::NUMERIC(12,2) AS receita,
+    ROUND(100.0 * SUM(f.sales)
+          / SUM(SUM(f.sales)) OVER (), 2) AS part_perc_receita
+FROM dw.fact_sales f
+JOIN dw.dim_customer c ON c.customer_sk = f.customer_sk
+GROUP BY c.customer_sk, c.customer_name, c.segment
+ORDER BY receita DESC
+LIMIT 10;
+-- Resultado da consulta acima:
+--    top10_clientes   |  segmento   | receita  | part_perc_receita 
+-- --------------------+-------------+----------+-------------------
+--  Sean Miller        | Home Office | 25043.07 |              1.11
+--  Tamara Chand       | Corporate   | 19052.22 |              0.84
+--  Raymond Buch       | Consumer    | 15117.35 |              0.67
+--  Tom Ashbrook       | Home Office | 14595.62 |              0.65
+--  Adrian Barton      | Consumer    | 14473.57 |              0.64
+--  Ken Lonsdale       | Consumer    | 14175.23 |              0.63
+--  Sanjit Chand       | Consumer    | 14142.34 |              0.63
+--  Hunter Lopez       | Consumer    | 12873.30 |              0.57
+--  Sanjit Engle       | Consumer    | 12209.44 |              0.54
+--  Christopher Conant | Consumer    | 12129.08 |              0.54
+-- (10 rows)
+
+-- Enunciado 19
+/* Usando a dw.dim_date nos seus dois papéis, mostre, para cada ano do pedido, a quantidade de
+itens, a receita e quantos desses itens foram enviados em fim de semana, em ordem cronológica. */
+SELECT
+    od.year AS ano_pedido,
+    COUNT(*) AS qtd_itens,
+    SUM(f.sales) AS receita,
+    COUNT(*) FILTER (
+        WHERE sd.is_weekend = TRUE
+    ) AS qtd_itens_fim_semana
+FROM dw.fact_sales f
+JOIN dw.dim_date od ON f.order_date_sk = od.date_sk
+JOIN dw.dim_date sd ON f.ship_date_sk = sd.date_sk
+GROUP BY od.year
+ORDER BY od.year;
+-- Resultado da consulta acima:
+--  ano_pedido | qtd_itens |  receita  | qtd_itens_fim_semana 
+-- ------------+-----------+-----------+----------------------
+--        2015 |      1953 | 479856.27 |                  632
+--        2016 |      2055 | 459435.94 |                  661
+--        2017 |      2534 | 600192.80 |                  812
+--        2018 |      3258 | 722051.96 |                  867
+-- (4 rows)

@@ -1,0 +1,582 @@
+/* Conectado ao banco pelo psql do CloudShell, crie os schemas staging e dw e a tabela
+staging.sales, com as colunas e os tipos da Tabela 2, NOT NULL em todas elas e row_id
+como chave primária. Registre todo o SQL no script.sql. */
+
+-- Verifica a versão do PSQL
+-- psql --version
+
+-- Realiza a conexão com o banco de dados
+-- psql -h dw-superstore-2041382521025.cvqogdb2b1ys.us-east-1.rds.amazonaws.com -p 5432 -U postgres -d superstore_dw
+
+-- Cria os schemas
+CREATE SCHEMA IF NOT EXISTS staging;
+psql:script.sql:13: NOTICE:  schema "staging" already exists, skipping
+CREATE SCHEMA
+CREATE SCHEMA IF NOT EXISTS dw;
+psql:script.sql:14: NOTICE:  schema "dw" already exists, skipping
+CREATE SCHEMA
+CREATE TABLE staging.sales (
+	row_id INTEGER PRIMARY KEY,
+	order_id VARCHAR(20) NOT NULL,
+	order_date DATE NOT NULL,
+	ship_date DATE NOT NULL,
+	ship_mode VARCHAR(20) NOT NULL,
+	customer_id VARCHAR(20) NOT NULL,
+	customer_name VARCHAR(60) NOT NULL,
+	segment VARCHAR(20) NOT NULL,
+	country VARCHAR(40) NOT NULL,
+	city VARCHAR(60) NOT NULL,
+	state VARCHAR(40) NOT NULL,
+	postal_code VARCHAR(10) NOT NULL,
+	region VARCHAR(20) NOT NULL,
+	product_id VARCHAR(20) NOT NULL,
+	category VARCHAR(30) NOT NULL,
+	sub_category VARCHAR(30) NOT NULL,
+	product_name VARCHAR(200) NOT NULL,
+	sales NUMERIC(12,2) NOT NULL
+);
+psql:script.sql:37: ERROR:  relation "sales" already exists
+       List of schemas
+  Name   |       Owner       
+---------+-------------------
+ dw      | postgres
+ public  | pg_database_owner
+ staging | postgres
+(3 rows)
+
+                          Table "staging.sales"
+    Column     |          Type          | Collation | Nullable | Default 
+---------------+------------------------+-----------+----------+---------
+ row_id        | integer                |           | not null | 
+ order_id      | character varying(20)  |           | not null | 
+ order_date    | date                   |           | not null | 
+ ship_date     | date                   |           | not null | 
+ ship_mode     | character varying(20)  |           | not null | 
+ customer_id   | character varying(20)  |           | not null | 
+ customer_name | character varying(60)  |           | not null | 
+ segment       | character varying(20)  |           | not null | 
+ country       | character varying(40)  |           | not null | 
+ city          | character varying(60)  |           | not null | 
+ state         | character varying(40)  |           | not null | 
+ postal_code   | character varying(10)  |           | not null | 
+ region        | character varying(20)  |           | not null | 
+ product_id    | character varying(20)  |           | not null | 
+ category      | character varying(30)  |           | not null | 
+ sub_category  | character varying(30)  |           | not null | 
+ product_name  | character varying(200) |           | not null | 
+ sales         | numeric(12,2)          |           | not null | 
+Indexes:
+    "sales_pkey" PRIMARY KEY, btree (row_id)
+
+/* Escreva uma única consulta sobre staging.sales que devolva, em uma linha: a quantidade
+de linhas, a soma de sales, a menor data de pedido, a maior data de envio, a quantidade de
+códigos postais 'N/D' e a quantidade de linhas com data de envio anterior à data do pedido.
+Registre os valores em comentário. A quantidade de linhas e a de códigos postais 'N/D'
+devem coincidir com as respostas (a) e (c) do Enunciado 2. */
+
+SELECT
+    COUNT(*) AS qtd_linhas, -- 9800
+    SUM(sales) AS total_vendas, -- 2261536.97
+    MIN(order_date) AS primeira_data_pedido, -- 2015-01-03
+    MAX(ship_date) AS ultima_data_envio, -- 2019-01-05
+    COUNT(*) FILTER (WHERE postal_code = 'N/D') AS qtd_nd, -- 11
+    COUNT(*) FILTER (WHERE ship_date < order_date) AS qtd_envio_antes_pedido -- 0
+FROM staging.sales;
+ qtd_linhas | total_vendas | primeira_data_pedido | ultima_data_envio | qtd_nd | qtd_envio_antes_pedido 
+------------+--------------+----------------------+-------------------+--------+------------------------
+       9800 |   2261536.97 | 2015-01-03           | 2019-01-05        |     11 |                      0
+(1 row)
+
+/* Crie e carregue dw.dim_date como na Seção 12.4 da apostila, com o calendário gerado por
+generate_series a partir de subconsultas sobre a staging: do primeiro dia do ano da menor
+data de pedido até o último dia do ano da maior data de envio. Explique em comentário por
+que o fim do calendário é calculado com a data de envio, e não com a do pedido. */
+
+-- Cria a dimensão date
+DROP TABLE IF EXISTS dw.dim_date CASCADE;
+psql:script.sql:66: NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to constraint fact_sales_order_date_sk_fkey on table dw.fact_sales
+drop cascades to constraint fact_sales_ship_date_sk_fkey on table dw.fact_sales
+DROP TABLE
+CREATE TABLE dw.dim_date (
+    date_sk INTEGER PRIMARY KEY,         -- no formato AAAAMMDD
+    full_date DATE NOT NULL UNIQUE,
+    day SMALLINT NOT NULL,
+    month SMALLINT NOT NULL,
+    month_name VARCHAR(15) NOT NULL,
+    quarter SMALLINT NOT NULL,
+    year SMALLINT NOT NULL,
+    day_of_week VARCHAR(15) NOT NULL,
+    is_weekend BOOLEAN NOT NULL
+);
+CREATE TABLE
+INSERT INTO dw.dim_date
+SELECT
+    CAST(TO_CHAR(d, 'YYYYMMDD') AS INTEGER),
+    d::DATE,
+    EXTRACT(DAY FROM d)::SMALLINT,
+    EXTRACT(MONTH FROM d)::SMALLINT,
+    TO_CHAR(d, 'TMMonth'),
+    EXTRACT(QUARTER FROM d)::SMALLINT,
+    EXTRACT(YEAR FROM d)::SMALLINT,
+    TO_CHAR(d, 'TMDay'),
+    EXTRACT(DOW FROM d) IN (0, 6)
+FROM generate_series(
+         -- 1 de janeiro do ano da primeira data de pedido
+         (SELECT date_trunc('year', MIN(order_date)) FROM staging.sales),
+         -- 31 de dezembro do ano da ultima data de envio
+         (SELECT date_trunc('year', MAX(ship_date)) + INTERVAL '1 year - 1 day'
+            FROM staging.sales),
+         INTERVAL '1 day') g(d);
+INSERT 0 1826
+SELECT MIN(full_date), MAX(full_date), COUNT(*) FROM dw.dim_date;
+    min     |    max     | count 
+------------+------------+-------
+ 2015-01-01 | 2019-12-31 |  1826
+(1 row)
+
+/* O fim do calendário é calculado com a maior data de envio porque
+um pedido pode ser enviado depois da data em que foi feito, inclusive
+no ano seguinte. Assim, o calendário também contempla as datas de envio.
+Se usássemos a maior data de pedido como referência, os envios de um
+ano posterior poderiam ficar fora do calendário. */
+
+-- Enunciado 12
+/* Escreva três consultas de verificação sobre a staging e registre os resultados em 
+comentário: quantos product_id aparecem com mais de um product_name; quantos customer_id
+aparecem com mais de um customer_name ou mais de um segment; e quantas combinações
+de cidade, estado e código postal aparecem com mais de uma região. */
+
+-- Verifica quantos product_id aparecem com mais de um product_name
+SELECT COUNT(*) AS qtd_produtos_varios_nomes
+FROM (
+    SELECT product_id
+    FROM staging.sales
+    GROUP BY product_id
+    HAVING COUNT(DISTINCT product_name) > 1);
+ qtd_produtos_varios_nomes 
+---------------------------
+                        32
+(1 row)
+
+SELECT COUNT(*) AS qtd_clientes_varios_nomes_ou_segmentos
+FROM (
+    SELECT customer_id
+    FROM staging.sales
+    GROUP BY customer_id
+    HAVING (COUNT(DISTINCT customer_name) > 1) OR (COUNT(DISTINCT segment) > 1));
+ qtd_clientes_varios_nomes_ou_segmentos 
+----------------------------------------
+                                      0
+(1 row)
+
+SELECT COUNT(*) AS qtd_combinacoes_varias_regioes
+FROM (
+    SELECT city, state, postal_code
+    FROM staging.sales
+    GROUP BY city, state, postal_code
+    HAVING COUNT(DISTINCT region) > 1);
+ qtd_combinacoes_varias_regioes 
+--------------------------------
+                              0
+(1 row)
+
+/* Crie as tabelas dw.dim_customer, dw.dim_product, dw.dim_location, dw.dim_ship_mode
+e dw.fact_sales conforme a Figura 4: chaves SERIAL, atributos naturais UNIQUE (em
+dim_location, a combinação de país, estado, cidade e código postal), seis chaves estrangeiras
+NOT NULL na fato, duas delas para dw.dim_date, métricas NOT NULL e um índice por chave
+estrangeira. Nesta fase as tabelas ficam vazias. */
+
+-- Cria a dimensão customer
+DROP TABLE IF EXISTS dw.dim_customer CASCADE;
+psql:script.sql:150: NOTICE:  drop cascades to constraint fact_sales_customer_sk_fkey on table dw.fact_sales
+DROP TABLE
+CREATE TABLE dw.dim_customer (
+    customer_sk SERIAL PRIMARY KEY,
+	customer_id VARCHAR(20) NOT NULL UNIQUE,
+    customer_name VARCHAR(60) NOT NULL,
+	segment VARCHAR(20) NOT NULL
+);
+CREATE TABLE
+DROP TABLE IF EXISTS dw.dim_product CASCADE;
+psql:script.sql:159: NOTICE:  drop cascades to constraint fact_sales_product_sk_fkey on table dw.fact_sales
+DROP TABLE
+CREATE TABLE dw.dim_product (
+    product_sk SERIAL PRIMARY KEY,
+	product_id VARCHAR(20) NOT NULL UNIQUE,
+    product_name VARCHAR(200) NOT NULL,
+	category VARCHAR(30) NOT NULL,
+	sub_category VARCHAR(30) NOT NULL
+);
+CREATE TABLE
+DROP TABLE IF EXISTS dw.dim_location CASCADE;
+psql:script.sql:169: NOTICE:  drop cascades to constraint fact_sales_location_sk_fkey on table dw.fact_sales
+DROP TABLE
+CREATE TABLE dw.dim_location (
+    location_sk SERIAL PRIMARY KEY,
+    country VARCHAR(40) NOT NULL,
+    state VARCHAR(40) NOT NULL,
+    city VARCHAR(60) NOT NULL,
+    postal_code VARCHAR(10) NOT NULL,
+    region VARCHAR(20) NOT NULL,
+    CONSTRAINT uq_dim_location UNIQUE (country, state, city, postal_code)
+);
+CREATE TABLE
+DROP TABLE IF EXISTS dw.dim_ship_mode CASCADE;
+psql:script.sql:181: NOTICE:  drop cascades to constraint fact_sales_ship_mode_sk_fkey on table dw.fact_sales
+DROP TABLE
+CREATE TABLE dw.dim_ship_mode (
+    ship_mode_sk SERIAL PRIMARY KEY,
+    ship_mode VARCHAR(20) NOT NULL UNIQUE
+);
+CREATE TABLE
+DROP TABLE IF EXISTS dw.fact_sales CASCADE;
+DROP TABLE
+CREATE TABLE dw.fact_sales (
+	sale_sk SERIAL PRIMARY KEY,
+	row_nk INTEGER NOT NULL UNIQUE,
+	order_nk VARCHAR(20) NOT NULL,
+	order_date_sk INTEGER NOT NULL REFERENCES dw.dim_date(date_sk),
+	ship_date_sk INTEGER NOT NULL REFERENCES dw.dim_date(date_sk),
+	customer_sk INTEGER NOT NULL REFERENCES dw.dim_customer(customer_sk),
+	product_sk INTEGER NOT NULL REFERENCES dw.dim_product(product_sk),
+	location_sk INTEGER NOT NULL REFERENCES dw.dim_location(location_sk),
+	ship_mode_sk INTEGER NOT NULL REFERENCES dw.dim_ship_mode(ship_mode_sk),
+	sales NUMERIC(12,2) NOT NULL,
+	ship_days INTEGER NOT NULL
+);
+CREATE TABLE
+CREATE INDEX ix_fs_order_date ON dw.fact_sales (order_date_sk);
+CREATE INDEX
+CREATE INDEX ix_fs_ship_date ON dw.fact_sales (ship_date_sk);
+CREATE INDEX
+CREATE INDEX ix_fs_customer ON dw.fact_sales (customer_sk);
+CREATE INDEX
+CREATE INDEX ix_fs_product ON dw.fact_sales (product_sk);
+CREATE INDEX
+CREATE INDEX ix_fs_location ON dw.fact_sales (location_sk);
+CREATE INDEX
+CREATE INDEX ix_fs_ship_mode ON dw.fact_sales (ship_mode_sk);
+CREATE INDEX
+/* Crie a procedure dw.carrega_dw(), nos moldes da Seção 13 da apostila. Requisitos
+obrigatórios:
+	a) esvazia a fato e as quatro dimensões da Fase 6, reiniciando as sequências; 
+	a dw.dim_date não é esvaziada;
+	b) carrega cada dimensão com exatamente uma linha por chave natural; quando o 
+	Enunciado 12 mostrar mais de um valor de atributo para a mesma chave, usa o menor 
+	valor, em ordem alfabética, e explica essa escolha em comentário;
+	c) carrega a fato trocando os atributos naturais pelas surrogate keys por JOIN; as 
+	duas chaves de data são obtidas por formatação das datas, sem JOIN com a dw.dim_date; 
+	ship_days é a diferença, em dias, entre a data de envio e a do pedido, obtida por 
+	subtração de datas;
+	d) após cada carga, obtém a quantidade de linhas inseridas com GET DIAGNOSTICS e a
+	informa com RAISE NOTICE;
+	e) ao final, compara a quantidade de linhas da fato com a da staging e, se forem 
+	diferentes, interrompe a carga com RAISE EXCEPTION, informando as duas quantidades.
+Em seguida, chame a procedure e confira, em uma única consulta com UNION ALL, a
+quantidade de linhas das quatro dimensões e da fato. Registre os números em comentário. */
+
+-- Cria a procedure de carga do DW
+CREATE OR REPLACE PROCEDURE dw.carrega_dw()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_linhas INTEGER;
+    v_total_fato INTEGER;
+    v_total_staging INTEGER;
+BEGIN
+    -- a) Esvazia a fato e as quatro dimensões, reiniciando as sequências
+    TRUNCATE TABLE dw.fact_sales, dw.dim_customer,
+                   dw.dim_product, dw.dim_location,
+                   dw.dim_ship_mode
+             RESTART IDENTITY CASCADE;
+    RAISE NOTICE 'Modelo dimensional limpo';
+
+    -- b) Agrupa pela chave natural para manter uma linha por chave
+    -- Quando há atributos diferentes, MIN escolhe o menor valor
+    -- em ordem alfabética, mantendo o mesmo critério em cada carga.
+    -- No Enunciado 12, foram encontrados 32 product_id com nomes diferentes.
+    INSERT INTO dw.dim_customer (customer_id, customer_name, segment)
+    SELECT customer_id, MIN(customer_name), MIN(segment)
+    FROM staging.sales
+    GROUP BY customer_id;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_customer: %', v_linhas;
+
+    INSERT INTO dw.dim_product (product_id, product_name, category, sub_category)
+    SELECT product_id, MIN(product_name), MIN(category), MIN(sub_category)
+    FROM staging.sales
+    GROUP BY product_id;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_product: %', v_linhas;
+
+    INSERT INTO dw.dim_location (country, state, city, postal_code, region)
+    SELECT country, state, city, postal_code, MIN(region)
+    FROM staging.sales
+    GROUP BY country, state, city, postal_code;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_location: %', v_linhas;
+
+    INSERT INTO dw.dim_ship_mode (ship_mode)
+    SELECT DISTINCT ship_mode
+    FROM staging.sales;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na dim_ship_mode: %', v_linhas;
+
+    RAISE NOTICE 'Dimensoes carregadas';
+
+    -- c) Obtém as surrogate keys das dimensões por JOIN
+    -- As chaves de data são calculadas por formatação
+    -- ship_days é calculado pela subtração das datas
+    INSERT INTO dw.fact_sales (row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
+							 product_sk, location_sk, ship_mode_sk, sales, ship_days)
+    SELECT
+        st.row_id, st.order_id, CAST(TO_CHAR(st.order_date, 'YYYYMMDD') AS INTEGER),
+        CAST(TO_CHAR(st.ship_date, 'YYYYMMDD') AS INTEGER), c.customer_sk,
+        p.product_sk, l.location_sk, s.ship_mode_sk, st.sales, st.ship_date - st.order_date
+    FROM staging.sales st
+    JOIN dw.dim_customer c ON st.customer_id = c.customer_id
+    JOIN dw.dim_product p ON st.product_id = p.product_id
+    JOIN dw.dim_location l ON st.country = l.country AND st.state = l.state
+        AND st.city = l.city AND st.postal_code = l.postal_code
+    JOIN dw.dim_ship_mode s ON st.ship_mode = s.ship_mode;
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    RAISE NOTICE 'Linhas inseridas na fato: %', v_linhas;
+
+    -- e) Compara as quantidades da fato e da staging
+    SELECT COUNT(*) INTO v_total_fato
+    FROM dw.fact_sales;
+    SELECT COUNT(*) INTO v_total_staging
+    FROM staging.sales;
+    IF v_total_fato <> v_total_staging THEN
+        RAISE EXCEPTION
+            'Quantidade de linhas na fato (%), diferente da staging (%)',
+            v_total_fato, v_total_staging;
+    END IF;
+	RAISE NOTICE 'Carga concluida com sucesso';
+END;
+$$;
+CREATE PROCEDURE
+CALL dw.carrega_dw();
+psql:script.sql:312: NOTICE:  Modelo dimensional limpo
+psql:script.sql:312: NOTICE:  Linhas inseridas na dim_customer: 793
+psql:script.sql:312: NOTICE:  Linhas inseridas na dim_product: 1861
+psql:script.sql:312: NOTICE:  Linhas inseridas na dim_location: 628
+psql:script.sql:312: NOTICE:  Linhas inseridas na dim_ship_mode: 4
+psql:script.sql:312: NOTICE:  Dimensoes carregadas
+psql:script.sql:312: NOTICE:  Linhas inseridas na fato: 9800
+psql:script.sql:312: NOTICE:  Carga concluida com sucesso
+CALL
+SELECT 'customer' AS dimensao, COUNT(*) AS linhas FROM dw.dim_customer
+UNION ALL
+SELECT 'product', COUNT(*) FROM dw.dim_product
+UNION ALL
+SELECT 'location', COUNT(*) FROM dw.dim_location
+UNION ALL
+SELECT 'ship_mode', COUNT(*) FROM dw.dim_ship_mode
+UNION ALL
+SELECT 'FATO', COUNT(*) FROM dw.fact_sales;
+ dimensao  | linhas 
+-----------+--------
+ customer  |    793
+ product   |   1861
+ location  |    628
+ ship_mode |      4
+ FATO      |   9800
+(5 rows)
+
+/* Crie a tabela dw.carga_log (identificador SERIAL, sale_sk, row_nk, operação, usuário e
+momento), a função dw.audita_fact_sales() e o trigger trg_audita_fact_sales, BEFORE
+INSERT e FOR EACH ROW sobre dw.fact_sales, como na Seção 14 da apostila. A função
+rejeita, com RAISE EXCEPTION e mensagem que identifique a linha, vendas com valor menor
+ou igual a zero e vendas com ship_days negativo, e registra no log toda linha aceita. Teste
+com uma inserção válida e deixe comentada uma inválida, acompanhada do erro esperado.
+Por fim, esvazie o log reiniciando a sequência, chame novamente a procedure e confira que o
+log tem exatamente uma linha por linha da fato. */
+
+-- Cria a tabela de log
+DROP TABLE IF EXISTS dw.carga_log;
+DROP TABLE
+CREATE TABLE dw.carga_log (
+    log_id SERIAL PRIMARY KEY,
+    sale_sk INTEGER,
+    row_nk INTEGER,
+    operacao VARCHAR(10),
+    usuario VARCHAR(60),
+    momento TIMESTAMP
+);
+CREATE TABLE
+CREATE OR REPLACE FUNCTION dw.audita_fact_sales()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Validação 1: o valor da venda deve ser maior que zero
+    IF NEW.sales <= 0 THEN
+        RAISE EXCEPTION 'Linha % rejeitada: valor invalido (%)',
+                        NEW.row_nk, NEW.sales;
+    END IF;
+
+    -- Validação 2: os dias de envio não podem ser negativos
+    IF NEW.ship_days < 0 THEN
+        RAISE EXCEPTION 'Linha % rejeitada: dias de envio negativos (%)',
+                        NEW.row_nk, NEW.ship_days;
+    END IF;
+
+    -- Registra no log a linha aceita
+    INSERT INTO dw.carga_log (sale_sk, row_nk, operacao, usuario, momento)
+    VALUES ( NEW.sale_sk, NEW.row_nk, TG_OP, CURRENT_USER, NOW());
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION
+DROP TRIGGER IF EXISTS trg_audita_fact_sales ON dw.fact_sales;
+psql:script.sql:380: NOTICE:  trigger "trg_audita_fact_sales" for relation "dw.fact_sales" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_audita_fact_sales
+    BEFORE INSERT ON dw.fact_sales
+    FOR EACH ROW
+    EXECUTE FUNCTION dw.audita_fact_sales();
+CREATE TRIGGER
+INSERT INTO dw.fact_sales (
+    row_nk, order_nk, order_date_sk, ship_date_sk, customer_sk,
+    product_sk, location_sk, ship_mode_sk, sales, ship_days)
+VALUES (9801, 'TESTE-VALIDO-01', 20171222, 20171226, 1, 1, 1, 1, 
+	147.00, 4);
+INSERT 0 1
+SELECT * FROM dw.carga_log;
+ log_id | sale_sk | row_nk | operacao | usuario  |          momento           
+--------+---------+--------+----------+----------+----------------------------
+      1 |    9801 |   9801 | INSERT   | postgres | 2026-11-24 02:09:23.297069
+(1 row)
+
+TRUNCATE TABLE dw.carga_log RESTART IDENTITY;
+TRUNCATE TABLE
+CALL dw.carrega_dw();
+psql:script.sql:415: NOTICE:  Modelo dimensional limpo
+psql:script.sql:415: NOTICE:  Linhas inseridas na dim_customer: 793
+psql:script.sql:415: NOTICE:  Linhas inseridas na dim_product: 1861
+psql:script.sql:415: NOTICE:  Linhas inseridas na dim_location: 628
+psql:script.sql:415: NOTICE:  Linhas inseridas na dim_ship_mode: 4
+psql:script.sql:415: NOTICE:  Dimensoes carregadas
+psql:script.sql:415: NOTICE:  Linhas inseridas na fato: 9800
+psql:script.sql:415: NOTICE:  Carga concluida com sucesso
+CALL
+SELECT
+    (SELECT COUNT(*) FROM dw.fact_sales) AS linhas_fato,
+    (SELECT COUNT(*) FROM dw.carga_log) AS linhas_log;
+ linhas_fato | linhas_log 
+-------------+------------
+        9800 |       9800
+(1 row)
+
+SELECT f.sale_sk, f.row_nk, COUNT(l.log_id) AS qtd_logs
+FROM dw.fact_sales f LEFT JOIN dw.carga_log l
+	ON f.sale_sk = l.sale_sk AND f.row_nk = l.row_nk
+GROUP BY f.sale_sk, f.row_nk
+HAVING COUNT(l.log_id) <> 1;
+ sale_sk | row_nk | qtd_logs 
+---------+--------+----------
+(0 rows)
+
+/* Mostre, para cada região e categoria, a quantidade de pedidos distintos, a quantidade 
+de itens vendidos e a receita, da maior para a menor receita. */
+
+SELECT
+	l.region AS regiao, p.category AS categoria,
+	COUNT(DISTINCT f.order_nk) AS qtd_pedidos,
+	COUNT(*) AS qtd_itens_vendidos,
+	SUM(f.sales) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_location l ON f.location_sk = l.location_sk
+JOIN dw.dim_product p ON f.product_sk = p.product_sk
+GROUP BY l.region, p.category
+ORDER BY receita DESC;
+ regiao  |    categoria    | qtd_pedidos | qtd_itens_vendidos |  receita  
+---------+-----------------+-------------+--------------------+-----------
+ East    | Technology      |         436 |                527 | 263116.59
+ West    | Technology      |         483 |                589 | 247404.95
+ West    | Furniture       |         582 |                691 | 245348.36
+ West    | Office Supplies |        1150 |               1860 | 217466.46
+ East    | Furniture       |         480 |                591 | 206461.36
+ East    | Office Supplies |        1048 |               1667 | 199940.90
+ Central | Technology      |         348 |                408 | 168739.19
+ Central | Office Supplies |         865 |               1399 | 163590.15
+ Central | Furniture       |         393 |                470 | 160317.56
+ South   | Technology      |         252 |                289 | 148195.21
+ South   | Office Supplies |         613 |                983 | 124424.77
+ South   | Furniture       |         272 |                326 | 116531.47
+(12 rows)
+
+/* Mostre, para cada modalidade de envio, a quantidade de itens, a média de ship_days
+arredondada para uma casa decimal e o menor e o maior valor de ship_days, da menor
+para a maior média. */
+
+SELECT
+	sh.ship_mode AS modalidade_envio,
+	COUNT(*) AS qtd_itens,
+	ROUND(AVG(f.ship_days)::NUMERIC, 1) AS media_ship_days,
+	MIN(f.ship_days) AS menor_ship_days,
+	MAX(f.ship_days) AS maior_ship_days
+FROM dw.fact_sales f
+JOIN dw.dim_ship_mode sh ON f.ship_mode_sk = sh.ship_mode_sk
+GROUP BY sh.ship_mode
+ORDER BY media_ship_days ASC;
+ modalidade_envio | qtd_itens | media_ship_days | menor_ship_days | maior_ship_days 
+------------------+-----------+-----------------+-----------------+-----------------
+ Same Day         |       538 |             0.0 |               0 |               1
+ First Class      |      1501 |             2.2 |               1 |               4
+ Second Class     |      1902 |             3.2 |               1 |               5
+ Standard Class   |      5859 |             5.0 |               3 |               7
+(4 rows)
+
+/* Mostre os dez clientes de maior receita, com nome, segmento, receita e participação percentual
+na receita total de todos os clientes, arredondada para duas casas, usando uma função de
+janela como na Seção 15.3 da apostila. */
+SELECT
+    c.customer_name AS top10_clientes,
+	c.segment AS segmento,
+    SUM(f.sales)::NUMERIC(12,2) AS receita,
+    ROUND(100.0 * SUM(f.sales)
+          / SUM(SUM(f.sales)) OVER (), 2) AS part_perc_receita
+FROM dw.fact_sales f
+JOIN dw.dim_customer c ON c.customer_sk = f.customer_sk
+GROUP BY c.customer_sk, c.customer_name, c.segment
+ORDER BY receita DESC
+LIMIT 10;
+   top10_clientes   |  segmento   | receita  | part_perc_receita 
+--------------------+-------------+----------+-------------------
+ Sean Miller        | Home Office | 25043.07 |              1.11
+ Tamara Chand       | Corporate   | 19052.22 |              0.84
+ Raymond Buch       | Consumer    | 15117.35 |              0.67
+ Tom Ashbrook       | Home Office | 14595.62 |              0.65
+ Adrian Barton      | Consumer    | 14473.57 |              0.64
+ Ken Lonsdale       | Consumer    | 14175.23 |              0.63
+ Sanjit Chand       | Consumer    | 14142.34 |              0.63
+ Hunter Lopez       | Consumer    | 12873.30 |              0.57
+ Sanjit Engle       | Consumer    | 12209.44 |              0.54
+ Christopher Conant | Consumer    | 12129.08 |              0.54
+(10 rows)
+
+/* Usando a dw.dim_date nos seus dois papéis, mostre, para cada ano do pedido, a quantidade de
+itens, a receita e quantos desses itens foram enviados em fim de semana, em ordem cronológica. */
+SELECT
+    od.year AS ano_pedido,
+    COUNT(*) AS qtd_itens,
+    SUM(f.sales) AS receita,
+    COUNT(*) FILTER (
+        WHERE sd.is_weekend = TRUE
+    ) AS qtd_itens_fim_semana
+FROM dw.fact_sales f
+JOIN dw.dim_date od ON f.order_date_sk = od.date_sk
+JOIN dw.dim_date sd ON f.ship_date_sk = sd.date_sk
+GROUP BY od.year
+ORDER BY od.year;
+ ano_pedido | qtd_itens |  receita  | qtd_itens_fim_semana 
+------------+-----------+-----------+----------------------
+       2015 |      1953 | 479856.27 |                  632
+       2016 |      2055 | 459435.94 |                  661
+       2017 |      2534 | 600192.80 |                  812
+       2018 |      3258 | 722051.96 |                  867
+(4 rows)
+
